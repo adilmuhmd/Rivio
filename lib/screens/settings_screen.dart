@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -18,56 +17,75 @@ class SettingsScreen extends ConsumerWidget {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // --- FIXED SLIVER APP BAR ---
+          // --- HIGH PERFORMANCE SLIVER APP BAR ---
           SliverAppBar(
-            expandedHeight: 180,
+            expandedHeight: 160,
             pinned: true,
             backgroundColor: Theme.of(context).colorScheme.background,
             surfaceTintColor: Colors.transparent,
-            leading: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: ClipOval(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    color: Colors.white10,
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                ),
-              ),
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
             ),
-            // Removed the BackdropFilter wrapper around FlexibleSpaceBar to fix the crash
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 24, bottom: 16),
-              title: Text(
-                'Settings',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -1.0,
-                  color: Colors.white,
-                ),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      _brandAccent.withOpacity(
-                        0.15,
-                      ), // Subtle brand glow at top
-                      Theme.of(context).colorScheme.background,
-                    ],
-                    stops: const [0.0, 0.8],
-                  ),
-                ),
-              ),
+            // Replaced FlexibleSpaceBar with a simple LayoutBuilder for safe, crash-free scrolling
+            flexibleSpace: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                // Calculate how expanded the app bar is
+                final double percent =
+                    (constraints.maxHeight - kToolbarHeight) /
+                    (160.0 - kToolbarHeight);
+                final double opacity = percent.clamp(0.0, 1.0);
+
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Fading background gradient
+                    Opacity(
+                      opacity: opacity,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              _brandAccent.withOpacity(
+                                0.15,
+                              ), // Subtle brand glow at top
+                              Theme.of(context).colorScheme.background,
+                            ],
+                            stops: const [0.0, 0.8],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Animated Title Position
+                    Positioned(
+                      left: Tween<double>(
+                        begin: 72.0,
+                        end: 24.0,
+                      ).transform(opacity),
+                      bottom: Tween<double>(
+                        begin: 16.0,
+                        end: 24.0,
+                      ).transform(opacity),
+                      child: Text(
+                        'Settings',
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -1.0,
+                              color: Colors.white,
+                              fontSize: Tween<double>(
+                                begin: 22.0,
+                                end: 36.0,
+                              ).transform(opacity),
+                            ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
 
@@ -90,9 +108,12 @@ class SettingsScreen extends ConsumerWidget {
 
                   Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.03),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.white10),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceVariant, // M3 Expressive solid color
+                          borderRadius: BorderRadius.circular(
+                            32,
+                          ), // M3 Soft roundness
                         ),
                         child: Column(
                           children: [
@@ -215,9 +236,8 @@ class SettingsScreen extends ConsumerWidget {
                         width: double.infinity,
                         padding: const EdgeInsets.all(32),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.03),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.white10),
+                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          borderRadius: BorderRadius.circular(32),
                         ),
                         child: Column(
                           children: [
@@ -273,7 +293,8 @@ class ManageFoldersScreen extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.background,
         appBar: AppBar(
-          backgroundColor: Colors.transparent,
+          backgroundColor: Theme.of(context).colorScheme.background,
+          surfaceTintColor: Colors.transparent,
           elevation: 0,
           title: const Text(
             'Manage Folders',
@@ -298,12 +319,12 @@ class ManageFoldersScreen extends ConsumerWidget {
                   ),
                   decoration: BoxDecoration(
                     color: folder.isEnabled
-                        ? Colors.white.withOpacity(0.05)
-                        : Colors.white.withOpacity(0.02),
-                    borderRadius: BorderRadius.circular(20),
+                        ? Theme.of(context).colorScheme.surfaceVariant
+                        : Colors.black12,
+                    borderRadius: BorderRadius.circular(24),
                     border: Border.all(
                       color: folder.isEnabled
-                          ? _brandAccent.withOpacity(0.5)
+                          ? _brandAccent.withOpacity(0.3)
                           : Colors.white10,
                       width: 1.5,
                     ),
@@ -361,8 +382,8 @@ class ManageFoldersScreen extends ConsumerWidget {
                   ),
                 )
                 .animate()
-                .fadeIn(delay: (index * 50).ms)
-                .slideX(begin: 0.1, curve: Curves.easeOutQuart);
+                .fadeIn(delay: (index * 40).ms)
+                .slideX(begin: 0.05, curve: Curves.easeOutQuart);
           },
         ),
 
@@ -370,7 +391,7 @@ class ManageFoldersScreen extends ConsumerWidget {
         floatingActionButton: FloatingActionButton.extended(
           backgroundColor: _brandAccent,
           foregroundColor: Colors.white,
-          elevation: 10,
+          elevation: 0, // Flat M3 look
           icon: const Icon(Icons.create_new_folder_rounded),
           label: const Text(
             'Add Directory',

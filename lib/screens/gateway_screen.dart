@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lottie/lottie.dart';
-import 'package:rivio/providers/media_provider.dart';
+import '../providers/media_provider.dart';
 import 'home_screen.dart';
+import 'settings_screen.dart'; // Needed to route directly to ManageFoldersScreen
+
+// Use identical physics constants as HomeScreen
+const Curve _m3Spring = Curves.easeOutQuart;
+const Duration _m3Duration = Duration(milliseconds: 800);
+const Duration _fadeDuration = Duration(milliseconds: 600);
 
 class RivioGateway extends ConsumerStatefulWidget {
   const RivioGateway({super.key});
@@ -121,10 +127,10 @@ class _RivioGatewayState extends ConsumerState<RivioGateway>
       );
     } else if (permState == AppPermissionState.granted) {
       // Fade into the home screen smoothly
-      return const HomeScreen().animate().fadeIn(duration: 800.ms);
+      return const HomeScreen().animate().fadeIn(duration: _m3Duration);
     } else {
       // Fade into the permission screen
-      return const PermissionScreen().animate().fadeIn(duration: 800.ms);
+      return const PermissionScreen().animate().fadeIn(duration: _m3Duration);
     }
   }
 }
@@ -134,6 +140,76 @@ class _RivioGatewayState extends ConsumerState<RivioGateway>
 // ============================================================================
 class PermissionScreen extends ConsumerWidget {
   const PermissionScreen({super.key});
+
+  // --- DEFAULT FOLDERS POPUP ---
+  void _showDefaultFoldersPopup(
+    BuildContext context,
+    WidgetRef ref,
+    Color accent,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: Row(
+          children: [
+            Icon(Icons.folder_special_rounded, color: accent, size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'Default Folders',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 22,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Rivio will request storage access to automatically scan these default directories for movies:\n\n'
+          '/storage/emulated/0/Movies\n'
+          '/storage/emulated/0/Download\n'
+          '/storage/emulated/0/Video\n\n'
+          'You can add or remove custom folders anytime in Settings.',
+          style: TextStyle(fontSize: 15, color: Colors.white70, height: 1.6),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.white54,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(permissionProvider.notifier).requestPermissions();
+            },
+            child: const Text(
+              'Proceed',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ),
+        ],
+      ).animate().scale(curve: Curves.easeOutQuart, duration: 400.ms).fadeIn(),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -152,18 +228,17 @@ class PermissionScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Expressive Icon Container (Asymmetrical Tension)
+              // Expressive Icon Container (Asymmetrical Tension, Solid M3 Style)
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: accent.withOpacity(0.15),
+                  color: Theme.of(context).colorScheme.surfaceVariant,
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(32),
                     topRight: Radius.circular(12),
                     bottomLeft: Radius.circular(12),
                     bottomRight: Radius.circular(32),
                   ),
-                  border: Border.all(color: accent.withOpacity(0.3), width: 2),
                 ),
                 child: Icon(
                   isBlocked ? Icons.block_rounded : Icons.movie_filter_rounded,
@@ -185,12 +260,8 @@ class PermissionScreen extends ConsumerWidget {
                     ),
                   )
                   .animate()
-                  .slideY(
-                    begin: 0.2,
-                    duration: 800.ms,
-                    curve: Curves.easeOutQuart,
-                  )
-                  .fadeIn(),
+                  .slideY(begin: 0.2, duration: _m3Duration, curve: _m3Spring)
+                  .fadeIn(duration: _fadeDuration),
 
               const SizedBox(height: 24),
 
@@ -208,14 +279,14 @@ class PermissionScreen extends ConsumerWidget {
                   .slideY(
                     begin: 0.2,
                     delay: 100.ms,
-                    duration: 800.ms,
-                    curve: Curves.easeOutQuart,
+                    duration: _m3Duration,
+                    curve: _m3Spring,
                   )
-                  .fadeIn(),
+                  .fadeIn(duration: _fadeDuration),
 
               const SizedBox(height: 48),
 
-              // Primary Action Button
+              // Primary Action Button (Flat, High Contrast)
               SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -223,17 +294,15 @@ class PermissionScreen extends ConsumerWidget {
                         if (isBlocked) {
                           ref.read(permissionProvider.notifier).openSettings();
                         } else {
-                          ref
-                              .read(permissionProvider.notifier)
-                              .requestPermissions();
+                          // Show the requested dialog before asking for permissions
+                          _showDefaultFoldersPopup(context, ref, accent);
                         }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: accent,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 24),
-                        elevation: 12,
-                        shadowColor: accent.withOpacity(0.4),
+                        elevation: 0, // Flat M3 Style
                         shape: const RoundedRectangleBorder(
                           borderRadius: BorderRadius.only(
                             topLeft: Radius.circular(24),
@@ -244,7 +313,9 @@ class PermissionScreen extends ConsumerWidget {
                         ),
                       ),
                       child: Text(
-                        isBlocked ? 'Open Settings' : 'Grant Auto-Scan Access',
+                        isBlocked
+                            ? 'Open Settings'
+                            : 'Grant Access', // Updated Text
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
@@ -257,24 +328,31 @@ class PermissionScreen extends ConsumerWidget {
                   .slideY(
                     begin: 0.2,
                     delay: 200.ms,
-                    duration: 800.ms,
-                    curve: Curves.easeOutQuart,
+                    duration: _m3Duration,
+                    curve: _m3Spring,
                   )
-                  .fadeIn(),
+                  .fadeIn(duration: _fadeDuration),
 
               const SizedBox(height: 16),
 
-              // Secondary Action: Manual Folder Selection via Settings
+              // Secondary Action: Manual Folder Selection
               if (!isBlocked)
                 SizedBox(
                   width: double.infinity,
                   child: TextButton(
                     onPressed: () {
-                      // Bypass permissions and go straight to Home Screen.
-                      // From Home, they can use the Settings UI to pick specific folders.
+                      // Fix: First, replace Gateway with HomeScreen.
+                      // Then, immediately push ManageFoldersScreen on top of it.
+                      // This ensures that when the user leaves the folder screen, they land on Home.
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(builder: (_) => const HomeScreen()),
+                      );
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageFoldersScreen(),
+                        ),
                       );
                     },
                     style: TextButton.styleFrom(
@@ -282,14 +360,14 @@ class PermissionScreen extends ConsumerWidget {
                       foregroundColor: Colors.white70,
                     ),
                     child: const Text(
-                      'I\'ll select folders manually later',
+                      'I\'ll select folders manually',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                     ),
                   ),
-                ).animate().fadeIn(delay: 500.ms),
+                ).animate().fadeIn(delay: 500.ms, duration: _fadeDuration),
             ],
           ),
         ),

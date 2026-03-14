@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +21,7 @@ const SpringDescription _expressiveSpring = SpringDescription(
 );
 
 // ============================================================================
-// OPTIMIZED IMAGE LOADER
+// CACHED IMAGE LOADER (Optimized with Disk Caching)
 // ============================================================================
 Widget _buildSafeImage(
   BuildContext context,
@@ -34,7 +35,7 @@ Widget _buildSafeImage(
     return Container(
       width: width,
       height: height,
-      color: Colors.white10,
+      color: Theme.of(context).colorScheme.surfaceVariant,
       child: Icon(
         Icons.movie_creation_rounded,
         color: Colors.white24,
@@ -43,37 +44,33 @@ Widget _buildSafeImage(
     );
   }
 
-  return Image.network(
-    url,
-    fit: fit,
-    width: width,
-    height: height,
-    alignment: alignment,
-    frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-      if (wasSynchronouslyLoaded) return child;
-      return AnimatedOpacity(
-        opacity: frame == null ? 0 : 1,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-        child: child,
-      );
-    },
-    loadingBuilder: (context, child, loadingProgress) {
-      if (loadingProgress == null) return child;
-      return Container(width: width, height: height, color: Colors.black26);
-    },
-    errorBuilder: (context, error, stackTrace) {
-      return Container(
+  return RepaintBoundary(
+    child: CachedNetworkImage(
+      imageUrl: url,
+      fit: fit,
+      width: width,
+      height: height,
+      alignment: alignment,
+      fadeInDuration: const Duration(milliseconds: 300),
+      fadeOutDuration: const Duration(milliseconds: 300),
+      // What to show while it's loading from the network or disk
+      placeholder: (context, url) => Container(
         width: width,
         height: height,
-        color: Colors.black26,
+        color: Theme.of(context).colorScheme.surfaceVariant,
+      ),
+      // What to show if the URL is broken
+      errorWidget: (context, url, error) => Container(
+        width: width,
+        height: height,
+        color: Theme.of(context).colorScheme.surfaceVariant,
         child: Icon(
           Icons.broken_image_rounded,
           color: Colors.white24,
           size: (width != null && width < 50) ? 20 : 48,
         ),
-      );
-    },
+      ),
+    ),
   );
 }
 
@@ -128,7 +125,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     }
   }
 
-  // --- MOVIE INFO BOTTOM SHEET ---
+  // --- MOVIE INFO BOTTOM SHEET (With Fade-In Blur Gradient) ---
   void _showInfoSheet(
     BuildContext context,
     LocalMovie activeMovie,
@@ -159,58 +156,110 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.transparent, // Required for custom backgrounds
       builder: (context) => RepaintBoundary(
         child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(48)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 32),
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+          child: SizedBox(
+            height:
+                MediaQuery.of(context).size.height *
+                0.8, // Take up 80% of screen
+            child: Stack(
+              children: [
+                // 1. The Faded Blur Layer
+                Positioned.fill(
+                  child: ShaderMask(
+                    // Fades the blur effect out at the very top
+                    shaderCallback: (Rect bounds) {
+                      return const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Colors.black],
+                        stops: [0.0, 0.15], // Transition to full blur quickly
+                      ).createShader(bounds);
+                    },
+                    blendMode: BlendMode.dstIn,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                      child: Container(color: Colors.transparent),
+                    ),
+                  ),
+                ),
+
+                // 2. The Content Layer with Faded Surface Color
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          // Fully transparent at top edge
+                          Theme.of(
+                            context,
+                          ).colorScheme.surface.withOpacity(0.0),
+                          // Transition to solid surface color
+                          Theme.of(
+                            context,
+                          ).colorScheme.surface.withOpacity(0.95),
+                          Theme.of(context).colorScheme.surface,
+                        ],
+                        stops: const [0.0, 0.15, 1.0],
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(32, 48, 32, 32),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              margin: const EdgeInsets.only(bottom: 32),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'Movie Info',
+                            style: Theme.of(context).textTheme.displaySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: -1.0,
+                                ),
+                          ),
+                          const SizedBox(height: 32),
+                          if (activeMovie.tagline != null &&
+                              activeMovie.tagline!.isNotEmpty) ...[
+                            Text(
+                              '"${activeMovie.tagline!}"',
+                              style: TextStyle(
+                                color:
+                                    themeAccent, // Emphasize tagline with movie accent
+                                fontStyle: FontStyle.italic,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 32),
+                          ],
+                          _buildInfoRow('Genres', genres),
+                          _buildInfoRow('Language', origLang),
+                          _buildInfoRow('Production', countries),
+                          _buildInfoRow('File Path', activeMovie.filePath),
+                          const SizedBox(height: 120), // Padding for scrolling
+                        ],
                       ),
                     ),
                   ),
-                  Text(
-                    'Movie Info',
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  if (activeMovie.tagline != null &&
-                      activeMovie.tagline!.isNotEmpty) ...[
-                    Text(
-                      '"${activeMovie.tagline!}"',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontStyle: FontStyle.italic,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildInfoRow('Genres', genres),
-                  _buildInfoRow('Original Language', origLang),
-                  _buildInfoRow('Production', countries),
-                  _buildInfoRow('File Path', activeMovie.filePath),
-                  const SizedBox(height: 48),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
