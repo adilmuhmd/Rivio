@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:palette_generator/palette_generator.dart';
 import '../models/local_movie.dart';
 import '../providers/media_provider.dart';
 import '../api/tmdb_service.dart';
@@ -13,12 +12,10 @@ import 'player_screen.dart';
 // ============================================================================
 // EXPRESSIVE SPRING PHYSICS
 // ============================================================================
-// Mirroring the physics of how objects actually move.
-const SpringDescription _expressiveSpring = SpringDescription(
-  mass: 1.0,
-  stiffness: 250.0,
-  damping: 20.0,
-);
+const Curve _m3Spring = Curves.easeOutQuart;
+const Duration _m3Duration = Duration(milliseconds: 800);
+const Duration _fadeDuration = Duration(milliseconds: 400);
+const Color _brandColor = Color(0xFF6FAF4F);
 
 // ============================================================================
 // CACHED IMAGE LOADER (Optimized with Disk Caching)
@@ -53,13 +50,11 @@ Widget _buildSafeImage(
       alignment: alignment,
       fadeInDuration: const Duration(milliseconds: 300),
       fadeOutDuration: const Duration(milliseconds: 300),
-      // What to show while it's loading from the network or disk
       placeholder: (context, url) => Container(
         width: width,
         height: height,
         color: Theme.of(context).colorScheme.surfaceVariant,
       ),
-      // What to show if the URL is broken
       errorWidget: (context, url, error) => Container(
         width: width,
         height: height,
@@ -83,13 +78,19 @@ class DetailScreen extends ConsumerStatefulWidget {
 }
 
 class _DetailScreenState extends ConsumerState<DetailScreen> {
-  Color? _accentColor;
+  late Color _accentColor;
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _extractAccentColor();
+    // INSTANT COLOR ASSIGNMENT: No async delay, no PaletteGenerator!
+    _accentColor = widget.movie.accentColor ?? _brandColor;
+
+    // Instantly sync the global theme provider before the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(accentColorProvider.notifier).state = _accentColor;
+    });
   }
 
   @override
@@ -98,34 +99,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     super.dispose();
   }
 
-  Future<void> _extractAccentColor() async {
-    final imageProvider = widget.movie.logoUrl != null
-        ? NetworkImage(widget.movie.logoUrl!)
-        : (widget.movie.posterUrl != null
-              ? NetworkImage(widget.movie.posterUrl!)
-              : null);
-
-    if (imageProvider != null) {
-      try {
-        final palette = await PaletteGenerator.fromImageProvider(
-          imageProvider,
-          maximumColorCount: 5,
-        );
-        if (mounted) {
-          final newColor =
-              palette.vibrantColor?.color ??
-              palette.dominantColor?.color ??
-              const Color(0xFFE50914);
-          setState(() {
-            _accentColor = newColor;
-          });
-          ref.read(accentColorProvider.notifier).state = newColor;
-        }
-      } catch (_) {}
-    }
-  }
-
-  // --- MOVIE INFO BOTTOM SHEET (With Fade-In Blur Gradient) ---
+  // --- MOVIE INFO BOTTOM SHEET (High Performance, Solid Color) ---
   void _showInfoSheet(
     BuildContext context,
     LocalMovie activeMovie,
@@ -160,102 +134,63 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       builder: (context) => RepaintBoundary(
         child: ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-          child: SizedBox(
+          child: Container(
+            // Use a solid color with high opacity instead of a heavy gradient/blur mask
+            color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
             height:
                 MediaQuery.of(context).size.height *
                 0.8, // Take up 80% of screen
-            child: Stack(
+            padding: const EdgeInsets.fromLTRB(32, 32, 32, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. The Faded Blur Layer
-                Positioned.fill(
-                  child: ShaderMask(
-                    // Fades the blur effect out at the very top
-                    shaderCallback: (Rect bounds) {
-                      return const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Colors.black],
-                        stops: [0.0, 0.15], // Transition to full blur quickly
-                      ).createShader(bounds);
-                    },
-                    blendMode: BlendMode.dstIn,
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                      child: Container(color: Colors.transparent),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 32),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
-
-                // 2. The Content Layer with Faded Surface Color
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          // Fully transparent at top edge
-                          Theme.of(
-                            context,
-                          ).colorScheme.surface.withOpacity(0.0),
-                          // Transition to solid surface color
-                          Theme.of(
-                            context,
-                          ).colorScheme.surface.withOpacity(0.95),
-                          Theme.of(context).colorScheme.surface,
-                        ],
-                        stops: const [0.0, 0.15, 1.0],
-                      ),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(32, 48, 32, 32),
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              margin: const EdgeInsets.only(bottom: 32),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(2),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Movie Info',
+                          style: Theme.of(context).textTheme.displaySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: -1.0,
                               ),
-                            ),
-                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        if (activeMovie.tagline != null &&
+                            activeMovie.tagline!.isNotEmpty) ...[
                           Text(
-                            'Movie Info',
-                            style: Theme.of(context).textTheme.displaySmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                  letterSpacing: -1.0,
-                                ),
+                            '"${activeMovie.tagline!}"',
+                            style: TextStyle(
+                              color: themeAccent,
+                              fontStyle: FontStyle.italic,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 32),
-                          if (activeMovie.tagline != null &&
-                              activeMovie.tagline!.isNotEmpty) ...[
-                            Text(
-                              '"${activeMovie.tagline!}"',
-                              style: TextStyle(
-                                color:
-                                    themeAccent, // Emphasize tagline with movie accent
-                                fontStyle: FontStyle.italic,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 32),
-                          ],
-                          _buildInfoRow('Genres', genres),
-                          _buildInfoRow('Language', origLang),
-                          _buildInfoRow('Production', countries),
-                          _buildInfoRow('File Path', activeMovie.filePath),
-                          const SizedBox(height: 120), // Padding for scrolling
                         ],
-                      ),
+                        _buildInfoRow('Genres', genres),
+                        _buildInfoRow('Language', origLang),
+                        _buildInfoRow('Production', countries),
+                        _buildInfoRow('File Path', activeMovie.filePath),
+                        const SizedBox(height: 120), // Padding for scrolling
+                      ],
                     ),
                   ),
                 ),
@@ -330,13 +265,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       orElse: () => widget.movie,
     );
 
-    final Color themeAccent =
-        _accentColor ?? Theme.of(context).colorScheme.primary;
     final Color bgColor = Color.alphaBlend(
-      themeAccent.withOpacity(0.12),
+      _accentColor.withOpacity(0.12),
       const Color(0xFF0F0F13),
     );
-    final bool isDarkText = themeAccent.computeLuminance() > 0.5;
+    final bool isDarkText = _accentColor.computeLuminance() > 0.5;
     final Color textColor = isDarkText ? Colors.black : Colors.white;
 
     final double imageHeight = size.height * 0.65;
@@ -357,7 +290,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                 children: [
                   _buildSafeImage(
                     context,
-                    activeMovie.backdropUrl,
+                    activeMovie.backdropUrl ??
+                        activeMovie.posterUrl, // Safely fallback
                     alignment: Alignment.topCenter,
                   ),
                   Container(
@@ -407,7 +341,6 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                       children: [
                         // ==============================================================
                         // UNIFIED IMPACT ANIMATION BLOCK
-                        // Groups Logo, Metadata, and Buttons so they spring together
                         // ==============================================================
                         Column(
                               children: [
@@ -434,6 +367,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                                 ?.copyWith(
                                                   fontSize: 42,
                                                   color: Colors.white,
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: -1.5,
                                                 ),
                                           ),
                                   ),
@@ -444,25 +379,24 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                 Center(
                                   child: _buildCleanMetadataRow(
                                     activeMovie,
-                                    themeAccent,
+                                    _accentColor,
                                   ),
                                 ),
 
                                 const SizedBox(height: 32),
 
-                                // --- PLAY / RESUME & INFO ROW ---
+                                // --- PLAY & INFO ROW ---
                                 Row(
                                   children: [
                                     Expanded(
                                       child: _buildPlayButton(
                                         context,
                                         activeMovie,
-                                        themeAccent,
+                                        _accentColor,
                                         textColor,
                                       ),
                                     ),
                                     const SizedBox(width: 16),
-                                    // INFO BUTTON
                                     Container(
                                       height: 64,
                                       width: 64,
@@ -483,7 +417,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                         onPressed: () => _showInfoSheet(
                                           context,
                                           activeMovie,
-                                          themeAccent,
+                                          _accentColor,
                                         ),
                                       ),
                                     ),
@@ -491,15 +425,17 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                 ),
                               ],
                             )
-                            // This applies the elastic "Impact" animation to the whole block
                             .animate()
                             .scale(
                               delay: 150.ms,
-                              begin: const Offset(0.9, 0.9),
-                              curve: Curves.elasticOut,
-                              duration: 1000.ms,
+                              begin: const Offset(
+                                0.95,
+                                0.95,
+                              ), // Softer scale for better speed
+                              curve: _m3Spring,
+                              duration: _m3Duration,
                             )
-                            .fadeIn(duration: 400.ms),
+                            .fadeIn(duration: _fadeDuration),
 
                         // ==============================================================
                         if (activeMovie.watchProgress > 0.01) ...[
@@ -524,7 +460,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                 await ref
                                     .read(localMoviesProvider.notifier)
                                     .saveWatchProgress(fresh, 0);
-                                if (context.mounted)
+                                if (context.mounted) {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
@@ -532,6 +468,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                           RivioPlayerScreen(movie: fresh),
                                     ),
                                   );
+                                }
                               },
                               icon: const Icon(
                                 Icons.replay_rounded,
@@ -578,7 +515,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
 
                         const SizedBox(height: 48),
 
-                        // --- CAST LIST (OPTIMIZED) ---
+                        // --- CAST LIST ---
                         if (activeMovie.cast != null &&
                             activeMovie.cast!.isNotEmpty) ...[
                           Text(
@@ -607,7 +544,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                           _showActorDetails(
                                             context,
                                             actor,
-                                            themeAccent,
+                                            _accentColor,
                                           );
                                         }
                                       },
@@ -649,7 +586,6 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                   },
                                 ),
                               )
-                              // Single spring animation for the whole list
                               .animate()
                               .fadeIn(delay: 500.ms)
                               .slideX(
@@ -666,27 +602,22 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
             ],
           ),
 
-          // 3. FLOATING BACK BUTTON (Optimized)
+          // 3. FLOATING BACK BUTTON
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 16,
-            child: RepaintBoundary(
-              // Cache the blur
-              child: ClipOval(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: Container(
-                    color: Colors.black26,
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: Colors.white,
+                  size: 28,
                 ),
+                onPressed: () => Navigator.pop(context),
               ),
             ),
           ),
@@ -743,12 +674,14 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
             style: TextStyle(color: Colors.white38, fontSize: 16),
           ),
         );
-      rowItems.add(Icon(Icons.star_rounded, color: Colors.white, size: 20));
+      rowItems.add(
+        Icon(Icons.star_rounded, color: Colors.white, size: 20),
+      ); // Changed star to white to prevent clashing
       rowItems.add(const SizedBox(width: 4));
       rowItems.add(
         Text(
           movie.rating!.toStringAsFixed(1),
-          style: TextStyle(
+          style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w900,
             fontSize: 16,
@@ -776,8 +709,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       style: ElevatedButton.styleFrom(
         backgroundColor: themeAccent,
         padding: const EdgeInsets.symmetric(vertical: 18),
-        elevation: 10,
-        shadowColor: themeAccent.withOpacity(0.5),
+        elevation: 0, // Flat M3 look
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
       ),
       child: Row(
@@ -802,12 +734,12 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
           ),
         ],
       ),
-    ); // Scale animation removed here since it's now wrapped in the parent Column animation
+    );
   }
 }
 
 // ============================================================================
-// OPTIMIZED ACTOR SHEET (Editorial Typography & Spring Physics)
+// OPTIMIZED ACTOR SHEET (High Performance, Solid Color)
 // ============================================================================
 class _ActorDetailsSheet extends StatefulWidget {
   final Map<String, String> actor;
@@ -851,135 +783,139 @@ class _ActorDetailsSheetState extends State<_ActorDetailsSheet> {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(48)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
-            height: MediaQuery.of(context).size.height * 0.88,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 48, 32, 24),
-                  child: Row(
-                    children: [
-                      ClipOval(
-                        child: SizedBox(
-                          width: 90,
-                          height: 90,
-                          child: _buildSafeImage(
-                            context,
-                            widget.actor['profilePath'],
-                          ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+        child: Container(
+          // Use a solid color with high opacity instead of a heavy gradient/blur mask
+          color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
+          height: MediaQuery.of(context).size.height * 0.88,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 48, 32, 24),
+                child: Row(
+                  children: [
+                    ClipOval(
+                      child: SizedBox(
+                        width: 90,
+                        height: 90,
+                        child: _buildSafeImage(
+                          context,
+                          widget.actor['profilePath'],
                         ),
                       ),
-                      const SizedBox(width: 28),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.actor['name'] ?? 'Unknown',
-                              style: Theme.of(context).textTheme.displaySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: -1.5,
+                    ),
+                    const SizedBox(width: 28),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.actor['name'] ?? 'Unknown',
+                            style: Theme.of(context).textTheme.displaySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -1.5,
+                                  color: Colors.white,
+                                  height: 1.1,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Filmography',
+                            style: TextStyle(
+                              color: widget.themeAccent,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        size: 36,
+                        color: Colors.white,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.white12, height: 1),
+              Expanded(
+                child: _isLoading
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          color: widget.themeAccent,
+                        ),
+                      )
+                    : _movies.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No filmography found',
+                          style: TextStyle(color: Colors.white60),
+                        ),
+                      )
+                    : ListView.builder(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            itemCount: _movies.length,
+                            itemBuilder: (context, index) {
+                              final m = _movies[index];
+                              final year =
+                                  m['release_date']
+                                      ?.toString()
+                                      .split('-')
+                                      .first ??
+                                  'Unknown Year';
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 36,
+                                  vertical: 10,
+                                ),
+                                leading: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: SizedBox(
+                                    width: 56,
+                                    height: 84,
+                                    child: _buildSafeImage(
+                                      context,
+                                      m['poster'],
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  m['title'] ?? 'Unknown Title',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 18,
                                     color: Colors.white,
-                                    height: 1.1,
+                                    letterSpacing: -0.5,
                                   ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Filmography',
-                              style: TextStyle(
-                                color: widget.themeAccent,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 18,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          size: 36,
-                          color: Colors.white,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Colors.white12, height: 1),
-                Expanded(
-                  child: _isLoading
-                      ? Center(
-                          child: CircularProgressIndicator(
-                            color: widget.themeAccent,
+                                ),
+                                subtitle: Text(
+                                  '$year • ${m['character'] ?? '—'}',
+                                  style: const TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                          .animate()
+                          .fadeIn(duration: _fadeDuration)
+                          .slideY(
+                            begin: 0.05,
+                            curve: _m3Spring,
+                            duration: _m3Duration,
                           ),
-                        )
-                      : _movies.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No filmography found',
-                            style: TextStyle(color: Colors.white60),
-                          ),
-                        )
-                      : ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              itemCount: _movies.length,
-                              itemBuilder: (context, index) {
-                                final m = _movies[index];
-                                return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 36,
-                                    vertical: 10,
-                                  ),
-                                  leading: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: SizedBox(
-                                      width: 56,
-                                      height: 84,
-                                      child: _buildSafeImage(
-                                        context,
-                                        m['poster'],
-                                      ),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    m['title'] ?? 'Unknown Title',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 18,
-                                      color: Colors.white,
-                                      letterSpacing: -0.5,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    '${m['year'] ?? '—'} • ${m['character'] ?? '—'}',
-                                    style: const TextStyle(
-                                      color: Colors.white60,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                );
-                              },
-                            )
-                            .animate()
-                            .fadeIn(duration: 400.ms)
-                            .slideY(
-                              begin: 0.05,
-                              curve: Curves.elasticOut,
-                              duration: 1000.ms,
-                            ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

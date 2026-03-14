@@ -4,8 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/media_provider.dart';
 
-// Uniform Brand Color for Settings
-const Color _brandAccent = Color(0xFFE50914);
+// Uniform Brand Color for Settings (Rivio Green)
+const Color _brandColor = Color(0xFF6FAF4F);
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -28,7 +28,6 @@ class SettingsScreen extends ConsumerWidget {
               icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
-            // Replaced FlexibleSpaceBar with a simple LayoutBuilder for safe, crash-free scrolling
             flexibleSpace: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
                 // Calculate how expanded the app bar is
@@ -49,7 +48,7 @@ class SettingsScreen extends ConsumerWidget {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              _brandAccent.withOpacity(
+                              _brandColor.withOpacity(
                                 0.15,
                               ), // Subtle brand glow at top
                               Theme.of(context).colorScheme.background,
@@ -125,12 +124,12 @@ class SettingsScreen extends ConsumerWidget {
                               leading: Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: _brandAccent.withOpacity(0.2),
+                                  color: _brandColor.withOpacity(0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.folder_shared_rounded,
-                                  color: _brandAccent,
+                                  color: _brandColor,
                                 ),
                               ),
                               title: const Text(
@@ -204,7 +203,7 @@ class SettingsScreen extends ConsumerWidget {
                                         color: Colors.white,
                                       ),
                                     ),
-                                    backgroundColor: _brandAccent,
+                                    backgroundColor: _brandColor,
                                     behavior: SnackBarBehavior.floating,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
@@ -241,21 +240,23 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                         child: Column(
                           children: [
-                            Icon(
-                              Icons.movie_filter_rounded,
-                              size: 64,
-                              color: _brandAccent.withOpacity(0.5),
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Rivio',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -1,
-                                color: Colors.white,
+                            SizedBox(
+                              width: 64,
+                              height: 64,
+                              child: Image.asset(
+                                'assets/logo.png',
+                                fit: BoxFit.contain,
+                                // Subtle fade for the logo instead of harsh coloring
+                                color: Colors.white.withOpacity(0.5),
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Icon(
+                                      Icons.movie_filter_rounded,
+                                      size: 64,
+                                      color: _brandColor.withOpacity(0.5),
+                                    ),
                               ),
                             ),
+
                             const Text(
                               'Version 1.0.0',
                               style: TextStyle(color: Colors.white54),
@@ -324,7 +325,7 @@ class ManageFoldersScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
                       color: folder.isEnabled
-                          ? _brandAccent.withOpacity(0.3)
+                          ? _brandColor.withOpacity(0.3)
                           : Colors.white10,
                       width: 1.5,
                     ),
@@ -336,7 +337,7 @@ class ManageFoldersScreen extends ConsumerWidget {
                     ),
                     leading: Icon(
                       Icons.folder_rounded,
-                      color: folder.isEnabled ? _brandAccent : Colors.white24,
+                      color: folder.isEnabled ? _brandColor : Colors.white24,
                       size: 32,
                     ),
                     title: Text(
@@ -372,7 +373,8 @@ class ManageFoldersScreen extends ConsumerWidget {
                           ),
                         Switch(
                           value: folder.isEnabled,
-                          activeColor: _brandAccent,
+                          activeColor: _brandColor,
+                          activeTrackColor: _brandColor.withOpacity(0.3),
                           onChanged: (_) => ref
                               .read(directoryProvider.notifier)
                               .toggleFolder(folder.path),
@@ -389,8 +391,9 @@ class ManageFoldersScreen extends ConsumerWidget {
 
         floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
         floatingActionButton: FloatingActionButton.extended(
-          backgroundColor: _brandAccent,
-          foregroundColor: Colors.white,
+          backgroundColor: _brandColor,
+          foregroundColor:
+              Colors.black, // High contrast text on green background
           elevation: 0, // Flat M3 look
           icon: const Icon(Icons.create_new_folder_rounded),
           label: const Text(
@@ -411,10 +414,10 @@ class ManageFoldersScreen extends ConsumerWidget {
                       'Added $selectedDirectory',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: Colors.black, // Dark text on light background
                       ),
                     ),
-                    backgroundColor: _brandAccent,
+                    backgroundColor: _brandColor,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),

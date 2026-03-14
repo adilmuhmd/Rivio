@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'dart:async';
+import 'dart:ui'; // Added for BackdropFilter in the Fix Match sheet
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,12 +15,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 // ============================================================================
 // M3 EXPRESSIVE MOTION SYSTEM
-// Smooth, predictable spatial springs.
 // ============================================================================
-const Curve _m3Spring =
-    Curves.easeOutQuart; // Less extreme than elastic, much smoother for 60fps
+const Curve _m3Spring = Curves.easeOutQuart;
 const Duration _m3Duration = Duration(milliseconds: 800);
 const Duration _fadeDuration = Duration(milliseconds: 400);
+
+const Color _brandColor = Color(0xFF6FAF4F);
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -33,14 +34,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(accentColorProvider.notifier).state = const Color(0xFFE50914);
+      ref.read(accentColorProvider.notifier).state = _brandColor;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final moviesAsync = ref.watch(localMoviesProvider);
-    // Determine screen size for Canonical Layout routing
     final isTablet = MediaQuery.of(context).size.width >= 600;
 
     return Scaffold(
@@ -56,7 +56,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // --- EFFICIENT DATA PREP ---
           final heroPool = List<LocalMovie>.from(movies)..shuffle(Random(42));
           final heroMovies = heroPool.take(min(5, heroPool.length)).toList();
-          final recentlyAdded = movies.take(isTablet ? 12 : 8).toList();
 
           final watchNext = List<LocalMovie>.from(movies);
           watchNext.sort((a, b) {
@@ -83,14 +82,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               .toList();
 
           return CustomScrollView(
-            // Use Bouncing physics for iOS feel, Clamping for Android feel. Bouncing is generally smoother.
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
+            physics: const ClampingScrollPhysics(),
             slivers: [
               _buildSliverAppBar(context),
 
-              // 1. HERO CAROUSEL (Adapts height for tablet)
+              // 1. HERO CAROUSEL
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   isTablet ? 32 : 16,
@@ -106,7 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
 
-              // 2. CONTINUE WATCHING (Emphasized Action Group)
+              // 2. CONTINUE WATCHING
               if (continueWatching.isNotEmpty) ...[
                 _buildSectionHeader(context, 'Continue Watching', isTablet),
                 SliverToBoxAdapter(
@@ -193,7 +189,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 padding: EdgeInsets.symmetric(horizontal: isTablet ? 32 : 16),
                 sliver: SliverLayoutBuilder(
                   builder: (context, constraints) {
-                    // Smart grid sizing based on actual available width
                     int crossAxisCount =
                         (constraints.crossAxisExtent / (isTablet ? 180 : 120))
                             .floor();
@@ -221,37 +216,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- HIGH PERFORMANCE APP BAR ---
-  // Using a solid color with opacity instead of a heavy Blur filter keeps 60fps scrolling.
   Widget _buildSliverAppBar(BuildContext context) {
     return SliverAppBar(
       toolbarHeight: 70,
       pinned: true,
       backgroundColor: Theme.of(
         context,
-      ).colorScheme.background.withOpacity(0.95), // M3 Surface tone
+      ).colorScheme.background.withOpacity(0.95),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.movie_filter_rounded,
-            color: Color(0xFFE50914),
-            size: 32,
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'RIVIO',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2.0,
-              color: Colors.white,
+          SizedBox(
+            width: 100,
+            height: 100,
+            child: Image.asset(
+              'assets/logo.png',
+              fit: BoxFit.contain,
+              cacheWidth: 312, // Performance optimization
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.movie_filter_rounded,
+                color: _brandColor,
+                size: 32,
+              ),
             ),
           ),
         ],
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.search_rounded, color: Colors.white),
+          onPressed: () {},
+        ),
         IconButton(
           icon: const Icon(Icons.settings_rounded, color: Colors.white),
           onPressed: () {
@@ -267,7 +264,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- M3 EMPHASIZED TYPOGRAPHY ---
   Widget _buildSectionHeader(
     BuildContext context,
     String title,
@@ -298,7 +294,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 // PERFORMANCE UTILITIES
 // ============================================================================
 
-// 1. List Rail Builder (Prevents building unseen items)
 class _HorizontalMediaRail extends StatelessWidget {
   final double height;
   final int itemCount;
@@ -317,9 +312,9 @@ class _HorizontalMediaRail extends StatelessWidget {
     return SizedBox(
       height: height,
       child: ListView.builder(
-        physics: const BouncingScrollPhysics(),
+        physics: const ClampingScrollPhysics(),
         scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none, // Removed to prevent clipping lag
+        clipBehavior: Clip.none,
         padding: padding,
         itemCount: itemCount,
         itemBuilder: builder,
@@ -328,7 +323,6 @@ class _HorizontalMediaRail extends StatelessWidget {
   }
 }
 
-// 2. High-Speed Image Loader (No AnimatedOpacity on every frame!)
 Widget _buildSafeImage(
   BuildContext context,
   String? url, {
@@ -337,7 +331,7 @@ Widget _buildSafeImage(
 }) {
   if (url == null || url.isEmpty) {
     return Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: Theme.of(context).colorScheme.surfaceVariant,
       child: const Center(
         child: Icon(
           Icons.movie_creation_rounded,
@@ -348,36 +342,28 @@ Widget _buildSafeImage(
     );
   }
 
-  return RepaintBoundary(
-    child: CachedNetworkImage(
-      imageUrl: url,
-      fit: fit,
-      alignment: alignment,
-      // CachedNetworkImage handles its own smooth fading natively!
-      fadeInDuration: const Duration(milliseconds: 400),
-      fadeOutDuration: const Duration(milliseconds: 400),
-
-      // What to show while it's loading (or fetching from disk)
-      placeholder: (context, url) => Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      ),
-
-      // What to show if the URL is broken
-      errorWidget: (context, url, error) => Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Center(
-          child: Icon(
-            Icons.broken_image_rounded,
-            color: Colors.white24,
-            size: 48,
-          ),
+  return CachedNetworkImage(
+    imageUrl: url,
+    fit: fit,
+    alignment: alignment,
+    fadeInDuration: const Duration(milliseconds: 200),
+    placeholder: (context, url) =>
+        Container(color: Theme.of(context).colorScheme.surfaceVariant),
+    errorWidget: (context, url, error) => Container(
+      color: Theme.of(context).colorScheme.surfaceVariant,
+      child: const Center(
+        child: Icon(
+          Icons.broken_image_rounded,
+          color: Colors.white24,
+          size: 48,
         ),
       ),
     ),
   );
 }
+
 // ============================================================================
-// M3 EXPRESSIVE UI COMPONENTS (Zero Shadows, High Contrast)
+// UI COMPONENTS
 // ============================================================================
 
 Widget _buildWatchedBadge(LocalMovie movie) {
@@ -387,7 +373,10 @@ Widget _buildWatchedBadge(LocalMovie movie) {
       right: 12,
       child: Container(
         padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+        ),
         child: const Icon(Icons.check_rounded, color: Colors.black, size: 16),
       ),
     );
@@ -397,7 +386,10 @@ Widget _buildWatchedBadge(LocalMovie movie) {
       right: 12,
       child: Container(
         padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+        ),
         child: const Icon(
           Icons.bookmark_rounded,
           color: Colors.black,
@@ -409,7 +401,6 @@ Widget _buildWatchedBadge(LocalMovie movie) {
   return const SizedBox.shrink();
 }
 
-// --- HERO CAROUSEL ---
 class _HeroCarousel extends StatefulWidget {
   final List<LocalMovie> movies;
   final bool isTablet;
@@ -454,10 +445,10 @@ class _HeroCarouselState extends State<_HeroCarousel> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: widget.isTablet ? 600 : 480, // Taller on tablets
+      height: widget.isTablet ? 600 : 480,
       child: PageView.builder(
         controller: _pageController,
-        physics: const BouncingScrollPhysics(),
+        physics: const ClampingScrollPhysics(),
         itemCount: widget.movies.length,
         onPageChanged: (index) => _currentPage = index,
         itemBuilder: (context, index) =>
@@ -481,7 +472,7 @@ class _HeroMovieCard extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(32), // Unified M3 Soft Radius
+          borderRadius: BorderRadius.circular(32),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(32),
@@ -490,11 +481,9 @@ class _HeroMovieCard extends StatelessWidget {
             children: [
               _buildSafeImage(
                 context,
-                movie.posterUrl,
+                movie.backdropUrl,
                 alignment: Alignment.topCenter,
               ),
-
-              // M3 Solid Scrim (No complex blend modes, better performance)
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -504,7 +493,6 @@ class _HeroMovieCard extends StatelessWidget {
                   ),
                 ),
               ),
-
               Positioned(
                 bottom: 32,
                 left: 32,
@@ -529,10 +517,7 @@ class _HeroMovieCard extends StatelessWidget {
                               height: 1.1,
                             ),
                       ),
-
                     const SizedBox(height: 24),
-
-                    // Pill-shaped high emphasis action
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
@@ -596,59 +581,42 @@ class _ContinueWatchingCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
-                  // Asymmetrical tension radius
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(8),
-                    bottomLeft: Radius.circular(8),
-                    bottomRight: Radius.circular(24),
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(8),
-                    bottomLeft: Radius.circular(8),
-                    bottomRight: Radius.circular(24),
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _buildSafeImage(
-                        context,
-                        movie.backdropUrl ?? movie.posterUrl,
-                      ),
-                      Container(color: Colors.black38), // Dim for action
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: accent.withOpacity(0.9),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 36,
-                          ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildSafeImage(
+                      context,
+                      movie.backdropUrl ?? movie.posterUrl,
+                    ),
+                    Container(color: Colors.black38),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: accent.withOpacity(0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 36,
                         ),
                       ),
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: LinearProgressIndicator(
-                          value: movie.watchProgress,
-                          backgroundColor: Colors.transparent,
-                          valueColor: AlwaysStoppedAnimation<Color>(accent),
-                          minHeight: 6,
-                        ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: LinearProgressIndicator(
+                        value: movie.watchProgress,
+                        backgroundColor: Colors.transparent,
+                        valueColor: AlwaysStoppedAnimation<Color>(accent),
+                        minHeight: 6,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -810,7 +778,7 @@ class _ExpressiveGridCard extends StatelessWidget {
 }
 
 // ============================================================================
-// INTERACTION ROUTER & HIGH PERFORMANCE ACTION MENU
+// INTERACTION ROUTER & ACTION MENU
 // ============================================================================
 class _ActionableMovieCard extends ConsumerWidget {
   final LocalMovie movie;
@@ -825,16 +793,14 @@ class _ActionableMovieCard extends ConsumerWidget {
           context,
           MaterialPageRoute(builder: (_) => DetailScreen(movie: movie)),
         );
-        ref.read(accentColorProvider.notifier).state = const Color(0xFFE50914);
+        ref.read(accentColorProvider.notifier).state = _brandColor;
       },
       onLongPress: () {
         HapticFeedback.heavyImpact();
         showModalBottomSheet(
           context: context,
           isScrollControlled: true,
-          backgroundColor: Theme.of(
-            context,
-          ).colorScheme.surface, // Solid color, NO blur for performance
+          backgroundColor: Theme.of(context).colorScheme.surface,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           ),
@@ -846,7 +812,7 @@ class _ActionableMovieCard extends ConsumerWidget {
   }
 }
 
-// --- LONG PRESS ACTION MENU ---
+// --- LONG PRESS ACTION MENU (Restored Features) ---
 class _ActionMenuSheet extends ConsumerWidget {
   final LocalMovie movie;
   const _ActionMenuSheet({required this.movie});
@@ -891,6 +857,23 @@ class _ActionMenuSheet extends ConsumerWidget {
                             movie.releaseYear!,
                             style: const TextStyle(color: Colors.white54),
                           ),
+                        // if (movie.userRating != null) ...[
+                        //   const SizedBox(height: 4),
+                        //   Row(
+                        //     children: [
+                        //       Icon(Icons.star_rounded, color: accent, size: 16),
+                        //       const SizedBox(width: 4),
+                        //       Text(
+                        //         'You rated: ${movie.userRating}',
+                        //         style: TextStyle(
+                        //           color: accent,
+                        //           fontWeight: FontWeight.bold,
+                        //           fontSize: 12,
+                        //         ),
+                        //       ),
+                        //     ],
+                        //   ),
+                        // ],
                       ],
                     ),
                   ),
@@ -942,14 +925,66 @@ class _ActionMenuSheet extends ConsumerWidget {
                 Navigator.pop(context);
               },
             ),
+            // _buildActionTile(
+            //   context,
+            //   icon: Icons.star_border_rounded,
+            //   title: 'Rate Movie',
+            //   color: Colors.white,
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     _showRatingDialog(context, ref);
+            //   },
+            // ),
+
+            // Restored Features
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Divider(color: Colors.white10, height: 1),
+            ),
+
             _buildActionTile(
               context,
-              icon: Icons.star_border_rounded,
-              title: 'Rate Movie',
-              color: Colors.white,
+              icon: Icons.edit_attributes_rounded,
+              title: 'Fix Match',
+              color: Colors.white54,
               onTap: () {
                 Navigator.pop(context);
-                // Rating dialog logic...
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors
+                      .transparent, // Need transparent here for the blur to work
+                  builder: (context) => _ManualSearchSheet(movie: movie),
+                );
+              },
+            ),
+            _buildActionTile(
+              context,
+              icon: Icons.info_outline_rounded,
+              title: 'File Info',
+              color: Colors.white54,
+              onTap: () {
+                Navigator.pop(context);
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    title: const Text('File Information'),
+                    content: Text(
+                      'Path:\n${movie.filePath}\n\nFilename:\n${movie.filename}',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(color: _brandColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
               },
             ),
           ],
@@ -977,6 +1012,266 @@ class _ActionMenuSheet extends ConsumerWidget {
         ),
       ),
       onTap: onTap,
+    );
+  }
+
+  void _showRatingDialog(BuildContext context, WidgetRef ref) {
+    double currentRating = movie.userRating ?? 5.0;
+    final accent = movie.accentColor ?? Theme.of(context).colorScheme.primary;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32),
+            ),
+            title: const Center(
+              child: Text(
+                'Rate Movie',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  currentRating.toStringAsFixed(1),
+                  style: TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                  ),
+                ),
+                Slider(
+                  value: currentRating,
+                  min: 0,
+                  max: 10,
+                  divisions: 20,
+                  activeColor: accent,
+                  onChanged: (val) => setState(() => currentRating = val),
+                ),
+              ],
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  ref
+                      .read(localMoviesProvider.notifier)
+                      .rateMovie(movie, currentRating);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accent,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text(
+                  'Save Rating',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- RESTORED MANUAL TMDB SEARCH SHEET ---
+class _ManualSearchSheet extends ConsumerStatefulWidget {
+  final LocalMovie movie;
+  const _ManualSearchSheet({required this.movie});
+
+  @override
+  ConsumerState<_ManualSearchSheet> createState() => _ManualSearchSheetState();
+}
+
+class _ManualSearchSheetState extends ConsumerState<_ManualSearchSheet> {
+  final TextEditingController _controller = TextEditingController();
+  bool _isLoading = false;
+  List<dynamic> _searchResults = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = widget.movie.parsedTitle;
+  }
+
+  Future<void> _performSearch() async {
+    setState(() => _isLoading = true);
+    final results = await TmdbService().searchMovieManual(_controller.text);
+    setState(() {
+      _searchResults = results;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _applyOverride(int tmdbId) async {
+    setState(() => _isLoading = true);
+    final updatedMovie = await TmdbService().fetchMovieById(
+      widget.movie,
+      tmdbId,
+    );
+
+    if (mounted) {
+      ref
+          .read(localMoviesProvider.notifier)
+          .updateMovieMatch(widget.movie, updatedMovie);
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Matched to ${updatedMovie.displayTitle}'),
+          backgroundColor: _brandColor,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+          padding: EdgeInsets.only(
+            top: 40,
+            left: 32,
+            right: 32,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 32,
+          ),
+          height: MediaQuery.of(context).size.height * 0.85,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Fix Match',
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: -1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'File: ${widget.movie.filename}',
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+              const SizedBox(height: 32),
+
+              TextField(
+                controller: _controller,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  color: Colors.white,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.05),
+                  contentPadding: const EdgeInsets.all(24),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(32),
+                    borderSide: BorderSide.none,
+                  ),
+                  suffixIcon: Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.search_rounded,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                      onPressed: _performSearch,
+                    ),
+                  ),
+                ),
+                onSubmitted: (_) => _performSearch(),
+              ),
+              const SizedBox(height: 32),
+
+              Expanded(
+                child: _isLoading
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          color: _brandColor,
+                        ).animate().fadeIn(duration: 400.ms),
+                      )
+                    : ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: _searchResults.length,
+                        itemBuilder: (context, index) {
+                          final res = _searchResults[index];
+                          final year =
+                              res['release_date']
+                                  ?.toString()
+                                  .split('-')
+                                  .first ??
+                              'Unknown Year';
+                          return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                leading: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: res['poster_path'] != null
+                                      ? Image.network(
+                                          'https://image.tmdb.org/t/p/w200${res['poster_path']}',
+                                          width: 60,
+                                          height: 90,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (c, e, s) => Container(
+                                            width: 60,
+                                            height: 90,
+                                            color: Colors.white10,
+                                          ),
+                                        )
+                                      : Container(
+                                          width: 60,
+                                          height: 90,
+                                          color: Colors.white10,
+                                        ),
+                                ),
+                                title: Text(
+                                  res['title'],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  year,
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                onTap: () => _applyOverride(res['id']),
+                              )
+                              .animate()
+                              .fadeIn(delay: (index * 40).ms)
+                              .slideY(begin: 0.1, curve: _m3Spring);
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1019,8 +1314,6 @@ class _ShimmerLoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: CircularProgressIndicator(color: Color(0xFFE50914)),
-    );
+    return const Center(child: CircularProgressIndicator(color: _brandColor));
   }
 }
