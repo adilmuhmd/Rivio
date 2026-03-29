@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'screens/gateway_screen.dart';
 import 'providers/media_provider.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load();
+  print("ENV LOADED: ${dotenv.env['TMDB_API_KEY']}");
+
   MediaKit.ensureInitialized();
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
 
   runApp(const ProviderScope(child: RivioApp()));
 }
@@ -32,22 +38,36 @@ ThemeData buildExpressiveTheme(Color dynamicAccent) {
       primary: dynamicAccent,
       surface: const Color(0xFF0F0F13),
       background: const Color(0xFF0F0F13),
-      onPrimary: dynamicAccent.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+      onPrimary: dynamicAccent.computeLuminance() > 0.5
+          ? Colors.black
+          : Colors.white,
     ),
     scaffoldBackgroundColor: const Color(0xFF0F0F13),
   );
 
   return base.copyWith(
     textTheme: base.textTheme.copyWith(
-      displayLarge: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: -2.0, height: 1.1),
-      displayMedium: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: -1.0),
-      headlineLarge: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.5),
+      displayLarge: const TextStyle(
+        fontWeight: FontWeight.w900,
+        letterSpacing: -2.0,
+        height: 1.1,
+      ),
+      displayMedium: const TextStyle(
+        fontWeight: FontWeight.w800,
+        letterSpacing: -1.0,
+      ),
+      headlineLarge: const TextStyle(
+        fontWeight: FontWeight.w900,
+        letterSpacing: -0.5,
+      ),
       titleLarge: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: dynamicAccent,
-        foregroundColor: dynamicAccent.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+        foregroundColor: dynamicAccent.computeLuminance() > 0.5
+            ? Colors.black
+            : Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
         elevation: 12,
         shadowColor: dynamicAccent.withOpacity(0.4),

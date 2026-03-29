@@ -361,6 +361,42 @@ class MediaLibraryNotifier extends StateNotifier<AsyncValue<List<LocalMovie>>> {
     }
   }
 
+  Future<void> deleteMovie(LocalMovie movie) async {
+    final file = File(movie.filePath);
+
+    // 1. Enforce 'All Files Access' on Android 11+ before attempting deletion
+    if (Platform.isAndroid) {
+      if (!await Permission.manageExternalStorage.isGranted) {
+        final status = await Permission.manageExternalStorage.request();
+        if (!status.isGranted) {
+          throw Exception(
+            '"All Files Access" permission is required to delete media.',
+          );
+        }
+      }
+    }
+
+    // 2. Attempt physical deletion
+    if (await file.exists()) {
+      await file
+          .delete(); // If this fails due to OS limits, it throws a FileSystemException and stops execution
+      debugPrint('✅ [SCANNER] Physically deleted from disk: ${movie.filename}');
+    } else {
+      throw Exception(
+        'File not found on disk. It may have been moved externally.',
+      );
+    }
+
+    // 3. ONLY update the Riverpod state if the physical deletion succeeded
+    state.whenData((movies) async {
+      final newList = movies
+          .where((m) => m.filePath != movie.filePath)
+          .toList();
+      state = AsyncValue.data(newList);
+      await _saveCache(newList);
+    });
+  }
+
   // --- NEW: USER ACTIONS ---
   Future<void> toggleWatchlist(LocalMovie movie) async {
     state.whenData((movies) async {

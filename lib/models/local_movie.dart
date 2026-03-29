@@ -7,7 +7,6 @@ class LocalMovie {
   final Duration? localDuration;
   final int? resumePositionMs;
 
-  // TMDB Enriched Data
   final String? tmdbTitle;
   final String? posterUrl;
   final String? backdropUrl;

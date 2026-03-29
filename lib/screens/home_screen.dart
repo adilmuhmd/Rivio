@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'dart:async';
-import 'dart:ui'; // Added for BackdropFilter in the Fix Match sheet
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -812,10 +812,101 @@ class _ActionableMovieCard extends ConsumerWidget {
   }
 }
 
-// --- LONG PRESS ACTION MENU (Restored Features) ---
+//--- LONG PRESS ACTION MENU
 class _ActionMenuSheet extends ConsumerWidget {
   final LocalMovie movie;
   const _ActionMenuSheet({required this.movie});
+
+  // M3 Expressive Delete Confirmation
+  void _showDeleteConfirmation(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: const Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.redAccent,
+              size: 28,
+            ),
+            SizedBox(width: 12),
+            Text(
+              'Delete File?',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 22,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete "${movie.filename}" from your device? This cannot be undone.',
+          style: const TextStyle(
+            fontSize: 15,
+            color: Colors.white70,
+            height: 1.5,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), // Close Dialog
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.white54,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(context); // Close Dialog
+              Navigator.pop(context); // Close Bottom Sheet
+              await ref.read(localMoviesProvider.notifier).deleteMovie(movie);
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                      'File deleted.',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    backgroundColor: Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ),
+        ],
+      ).animate().scale(curve: Curves.easeOutBack, duration: 400.ms).fadeIn(),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -857,23 +948,23 @@ class _ActionMenuSheet extends ConsumerWidget {
                             movie.releaseYear!,
                             style: const TextStyle(color: Colors.white54),
                           ),
-                        // if (movie.userRating != null) ...[
-                        //   const SizedBox(height: 4),
-                        //   Row(
-                        //     children: [
-                        //       Icon(Icons.star_rounded, color: accent, size: 16),
-                        //       const SizedBox(width: 4),
-                        //       Text(
-                        //         'You rated: ${movie.userRating}',
-                        //         style: TextStyle(
-                        //           color: accent,
-                        //           fontWeight: FontWeight.bold,
-                        //           fontSize: 12,
-                        //         ),
-                        //       ),
-                        //     ],
-                        //   ),
-                        // ],
+                        if (movie.userRating != null) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(Icons.star_rounded, color: accent, size: 16),
+                              const SizedBox(width: 4),
+                              Text(
+                                'You rated: ${movie.userRating}',
+                                style: TextStyle(
+                                  color: accent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -925,18 +1016,17 @@ class _ActionMenuSheet extends ConsumerWidget {
                 Navigator.pop(context);
               },
             ),
-            // _buildActionTile(
-            //   context,
-            //   icon: Icons.star_border_rounded,
-            //   title: 'Rate Movie',
-            //   color: Colors.white,
-            //   onTap: () {
-            //     Navigator.pop(context);
-            //     _showRatingDialog(context, ref);
-            //   },
-            // ),
+            _buildActionTile(
+              context,
+              icon: Icons.star_border_rounded,
+              title: 'Rate Movie',
+              color: Colors.white,
+              onTap: () {
+                Navigator.pop(context);
+                _showRatingDialog(context, ref);
+              },
+            ),
 
-            // Restored Features
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               child: Divider(color: Colors.white10, height: 1),
@@ -952,8 +1042,7 @@ class _ActionMenuSheet extends ConsumerWidget {
                 showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
-                  backgroundColor: Colors
-                      .transparent, // Need transparent here for the blur to work
+                  backgroundColor: Colors.transparent,
                   builder: (context) => _ManualSearchSheet(movie: movie),
                 );
               },
@@ -985,6 +1074,17 @@ class _ActionMenuSheet extends ConsumerWidget {
                     ],
                   ),
                 );
+              },
+            ),
+
+            // --- NEW: DELETE MEDIA ACTION ---
+            _buildActionTile(
+              context,
+              icon: Icons.delete_outline_rounded,
+              title: 'Delete File',
+              color: Colors.redAccent,
+              onTap: () {
+                _showDeleteConfirmation(context, ref);
               },
             ),
           ],

@@ -2,18 +2,18 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:palette_generator/palette_generator.dart';
 import '../models/local_movie.dart';
 
 class TmdbService {
-  static const String _apiKey = '930468fda014966745238047b14e0346';
+  final String _apiKey = dotenv.env['TMDB_API_KEY'] ?? '';
   static const String _baseUrl = 'https://api.themoviedb.org/3';
 
   // AUTOMATIC METADATA MATCHER
   Future<LocalMovie> fetchMetadata(LocalMovie movie) async {
-    if (_apiKey == 'YOUR_TMDB_API_KEY') return movie;
-
+    if (_apiKey.isEmpty) return movie;
     try {
       final titleParts = movie.parsedTitle.split(' ');
 
